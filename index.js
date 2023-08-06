@@ -5,6 +5,15 @@ const fs = require('fs-extra')
 require('colors')
 
 /**
+ * Global options
+ */
+const delayTime = {
+  skipStories: 3 * 1000,
+  refreshFeed: 60 * 1000,
+  refreshStory: 60 * 30 * 1000
+}
+
+/**
  * Browser options
  */
 const browserHide = false
@@ -26,6 +35,7 @@ const elmSelector = {
   notificationPopup: 'button[tabindex="0"]:nth-child(2)',
   storiesCheck: 'li[tabindex="-1"] button:nth-child(1)',
   storiesNext: 'button[aria-label="Next"]',
+  storiesLove: 'span div[role="button"]'
 }
 
 /**
@@ -76,41 +86,47 @@ async function runBrowser() {
  */
 async function main() {
   try {
+    let totalStoriesView = 0
     const { browser, page } = await runBrowser()
     await page.goto('https://www.instagram.com/', browserPageOpt)
     try {
       await page.waitForSelector(elmSelector.notificationPopup, browserPageTmt)
       await page.tap(elmSelector.notificationPopup)
-      printLog('INFO: Anda berhasil sudah login...', 'green')
+      printLog('INFO: Anda berhasil sudah login...\n', 'green')
       while (true) {
         try {
           await page.waitForSelector(elmSelector.storiesCheck, browserPageTmt)
           await page.tap(elmSelector.storiesCheck)
-          await delay(3000)
+          await delay(delayTime.skipStories)
           while (true) {
             try {
               await page.waitForSelector(elmSelector.storiesNext, browserPageTmt)
+              await pageWaitForSelector(elmSelector.storiesLove, browserPageTmt)
+              await page.tap(elmSelector.storiesLove)
               await page.tap(elmSelector.storiesNext)
               const currentUrl = await page.url()
               if (currentUrl.match(/stories/)) {
-                printLog(`INFO: Melihat stories -> ${currentUrl}`, 'yellow')
-                await delay(3000)
+                totalStoriesView = 0
+                printLog(`INFO: Melihat & React stories -> ${currentUrl}`, 'blue')
+                printLog('-', 'bold')
+                await delay(delayTime.skipStories)
               } else {
-                printLog('INFO: Stories selesai dilihat...', 'blue')
-                printLog('-- [ Refreshing ] --', 'blue')
-                await page.goto('https://www.instagram.com/', browserPageOpt)
-                break
+                throw new Error('Stories tidak ditemukan')
               }
             } catch (err) {
+              totalStoriesView = totalStoriesView + 1
               printLog('INFO: Stories selesai dilihat...', 'blue')
-              printLog('-- [ Refreshing ] --', 'blue')
-                await page.goto('https://www.instagram.com/', browserPageOpt)
+              printLog('-- [ Refreshing ] --\n', 'yellow')
+              if (totalStoriesView >= 3) {
+                printLog('-- [ Delay Feed ] --\n', 'yellow')
+                await delay(delayTime.refreshStory)
+              }
+              await page.goto('https://www.instagram.com/', browserPageOpt)
               break
             }
           }
         } catch (err) {
-          printLog('INFO: Tidak ada stories yang tersedia...', 'yellow')
-          await delay(60000)
+          await delay(delayTime.refreshFeed)
         }
       }
     } catch (err) {
@@ -118,7 +134,6 @@ async function main() {
       throw new Error('Session tidak valid, silahkan login kembali')
     }
   } catch (err) {
-    console.log(err)
     printLog(`ERROR: ${err.message}`, 'red')
   }
 }
