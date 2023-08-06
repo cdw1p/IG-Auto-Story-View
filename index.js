@@ -92,12 +92,19 @@ async function main() {
               await page.waitForSelector(elmSelector.storiesNext, browserPageTmt)
               await page.tap(elmSelector.storiesNext)
               const currentUrl = await page.url()
-              printLog(`INFO: Melihat stories -> ${currentUrl}`, 'yellow')
-              await delay(3000)
+              if (currentUrl.match(/stories/)) {
+                printLog(`INFO: Melihat stories -> ${currentUrl}`, 'yellow')
+                await delay(3000)
+              } else {
+                printLog('INFO: Stories selesai dilihat...', 'blue')
+                printLog('-- [ Refreshing ] --', 'blue')
+                await page.goto('https://www.instagram.com/', browserPageOpt)
+                break
+              }
             } catch (err) {
               printLog('INFO: Stories selesai dilihat...', 'blue')
               printLog('-- [ Refreshing ] --', 'blue')
-              await page.reload(browserPageOpt)
+                await page.goto('https://www.instagram.com/', browserPageOpt)
               break
             }
           }
