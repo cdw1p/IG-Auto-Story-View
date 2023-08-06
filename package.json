@@ -21,7 +21,6 @@
     "delay": "^5.0.0",
     "fs-extra": "^11.1.1",
     "moment": "^2.29.4",
-    "puppeteer": "^19.9.1",
-    "puppeteer-extra-plugin-user-data-dir": "^2.4.1"
+    "puppeteer": "^19.9.1"
   }
 }
