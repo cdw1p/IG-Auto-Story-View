@@ -101,7 +101,7 @@ async function main() {
           while (true) {
             try {
               await page.waitForSelector(elmSelector.storiesNext, browserPageTmt)
-              await page.WaitForSelector(elmSelector.storiesLove, browserPageTmt)
+              await page.waitForSelector(elmSelector.storiesLove, browserPageTmt)
               await page.tap(elmSelector.storiesLove)
               await page.tap(elmSelector.storiesNext)
               const currentUrl = await page.url()
