@@ -9,14 +9,15 @@ require('colors')
  */
 const delayTime = {
   skipStories: 3 * 1000,
-  refreshFeed: 60 * 1000,
-  refreshStory: 60 * 30 * 1000
+  refreshFeed: 10 * 1000,
+  refreshStory: 10 * 1000 * 10
 }
 
 /**
  * Browser options
  */
 const browserHide = false
+const browserNoMedia = true
 const browserPageOpt = { waitUntil: 'networkidle0' }
 const browserPageTmt = { timeout: 500 }
 const browserOptions = {
@@ -31,9 +32,9 @@ const browserOptions = {
 /**
  * Instagram selector
  */
-const elmSelector = {
+let elmIndex = 1
+let elmSelector = {
   notificationPopup: 'button[tabindex="0"]:nth-child(2)',
-  storiesCheck: 'li[tabindex="-1"] button:nth-child(1)',
   storiesNext: 'button[aria-label="Next"]',
   storiesLove: 'span div[role="button"]'
 }
@@ -82,50 +83,79 @@ async function runBrowser() {
 }
 
 /**
+ * Intercepting request (block image)
+ */
+async function interceptRequestNoMedia(page) {
+  await page.setRequestInterception(true)
+  page.on('request', (req) => {
+    if (req.resourceType() === 'image' && browserNoMedia) {
+      req.abort()
+    } else {
+      req.continue()
+    }
+  })
+}
+
+/**
+ * Access Instagram homepage
+ */
+async function accessInstagram(page) {
+  await page.goto('https://www.instagram.com', browserPageOpt)
+}
+
+/**
  * Main function
  */
 async function main() {
+  const { browser, page } = await runBrowser()
+  await interceptRequestNoMedia(page)
   try {
-    let totalStoriesView = 0
-    const { browser, page } = await runBrowser()
-    await page.goto('https://www.instagram.com/', browserPageOpt)
+    let totalStoriesView = 0, prevStoriesUrl = 'none'
+    await accessInstagram(page)
     try {
       await page.waitForSelector(elmSelector.notificationPopup, browserPageTmt)
       await page.tap(elmSelector.notificationPopup)
-      printLog('INFO: Anda berhasil sudah login...\n', 'green')
+      printLog('INFO: Anda berhasil sudah login...', 'green')
+      printLog('INFO: Memulai proses otomasi...\n-', 'bold')
       while (true) {
         try {
-          await page.waitForSelector(elmSelector.storiesCheck, browserPageTmt)
-          await page.tap(elmSelector.storiesCheck)
+          await page.waitForSelector(`li:nth-child(${elmIndex + 2}) button:nth-child(1)`, browserPageTmt)
+          await page.tap(`li:nth-child(${elmIndex + 2}) button:nth-child(1)`)
           await delay(delayTime.skipStories)
           while (true) {
             try {
               await page.waitForSelector(elmSelector.storiesNext, browserPageTmt)
               await page.waitForSelector(elmSelector.storiesLove, browserPageTmt)
-              await page.tap(elmSelector.storiesLove)
-              await page.tap(elmSelector.storiesNext)
               const currentUrl = await page.url()
               if (currentUrl.match(/stories/)) {
-                totalStoriesView = 0
-                printLog(`INFO: Melihat & React stories -> ${currentUrl}`, 'blue')
-                printLog('-', 'bold')
-                await delay(delayTime.skipStories)
+                if (currentUrl !== prevStoriesUrl) {
+                  elmIndex = 1, totalStoriesView = 0, prevStoriesUrl = currentUrl
+                  await page.tap(elmSelector.storiesLove)
+                  await delay(delayTime.skipStories)
+                  await page.tap(elmSelector.storiesNext)
+                  await delay(delayTime.skipStories)
+                  printLog(`INFO: Melihat & React stories -> ${currentUrl}`, 'bold')
+                }
               } else {
-                throw new Error('Stories tidak ditemukan')
+                throw new Error('Bukan halaman stories')
               }
             } catch (err) {
               totalStoriesView = totalStoriesView + 1
-              printLog('INFO: Stories selesai dilihat...', 'blue')
-              printLog('-- [ Refreshing ] --\n', 'yellow')
-              if (totalStoriesView >= 3) {
-                printLog('-- [ Delay Feed ] --\n', 'yellow')
+              const currentUrl = await page.url()
+              if (currentUrl.match(/live/)) {
+                printLog(`INFO: Skip stories -> ${currentUrl}`, 'red')
+                elmIndex = elmIndex + 1
+              }
+              if (totalStoriesView >= 2) {
+                printLog('-- [ REFRESHING ] --\n', 'yellow')
                 await delay(delayTime.refreshStory)
               }
-              await page.goto('https://www.instagram.com/', browserPageOpt)
+              await accessInstagram(page)
               break
             }
           }
         } catch (err) {
+          await accessInstagram(page)
           await delay(delayTime.refreshFeed)
         }
       }
@@ -134,7 +164,13 @@ async function main() {
       throw new Error('Session tidak valid, silahkan login kembali')
     }
   } catch (err) {
-    printLog(`ERROR: ${err.message}`, 'red')
+    if (err.message.match(/Navigation timeout/)) {
+      await browser.close()
+      printLog('ERROR: Tidak dapat terhubung ke Instagram', 'red')
+      main()
+    } else {
+      printLog(`ERROR: ${err.message}`, 'red')
+    }
   }
 }
 
